@@ -145,6 +145,151 @@ def get_price_bs_european(
     else:
         return pricer.price_mc(n_paths=n_paths, n_steps=1, seed=seed)  # type: ignore[arg-type]
 
+def get_price_bs_european_dividend(
+    St: float,
+    K: float,
+    T: float,
+    r: float,
+    sigma: float,
+    call: bool,
+    q: float = 0.0,
+    engine: str = "analytical",
+    n_paths: int | None = None,
+    seed: int | None = None,
+) -> float:
+    """
+    Price a European option on a stock paying a continuous dividend yield q.
+
+    Risk-neutral dynamics dS = (r - q) S dt + sigma S dW (Module 9);
+    discounting still uses r. With q = 0 this recovers Assignment 3.
+
+    Parameters
+    ----------
+    St, K, T, r, sigma, call, engine, n_paths, seed
+        As in ``get_price_bs_european`` (Assignment 3).
+    q : float, optional
+        Continuous dividend yield. Default 0.0 (recovers Assignment 3).
+
+    Returns
+    -------
+    float
+        Option price at valuation date.
+    """
+    if engine not in ("analytical", "mc"):
+        raise ValueError(f"engine must be 'analytical' or 'mc', got {engine!r}")
+    if engine == "mc" and n_paths is None:
+        raise ValueError("n_paths is required when engine='mc'")
+    if St <= 0:
+        raise ValueError(f"St must be > 0, got {St}")
+    if K <= 0:
+        raise ValueError(f"K must be > 0, got {K}")
+    if sigma <= 0:
+        raise ValueError(f"sigma must be > 0, got {sigma}")
+    if T < 0:
+        raise ValueError(f"T must be >= 0, got {T}")
+
+    contract = EuropeanOption(K, call)
+    model = BlackScholesModel(St, r, sigma, q)
+    pricer = BSPricer(contract, model, T)
+
+    if engine == "analytical":
+        return pricer.price_analytical()
+    return pricer.price_mc(n_paths=n_paths, n_steps=1, seed=seed)  # type: ignore[arg-type]
+
+def get_price_fx_option(
+    St: float,
+    K: float,
+    T: float,
+    r_d: float,
+    r_f: float,
+    sigma: float,
+    call: bool,
+    engine: str = "analytical",
+    n_paths: int | None = None,
+    seed: int | None = None,
+) -> float:
+    """
+    Price a European FX option under the Garman-Kohlhagen model.
+
+    St is the FX spot (domestic per unit foreign); r_d and r_f are the
+    domestic and foreign continuously compounded rates; the price is returned
+    in domestic currency. Internally this is the cost-of-carry model with
+    q = r_f and r = r_d.
+
+    Returns
+    -------
+    float
+        Option price at valuation date, in domestic currency.
+    """
+    if engine not in ("analytical", "mc"):
+        raise ValueError(f"engine must be 'analytical' or 'mc', got {engine!r}")
+    if engine == "mc" and n_paths is None:
+        raise ValueError("n_paths is required when engine='mc'")
+    if St <= 0:
+        raise ValueError(f"St must be > 0, got {St}")
+    if K <= 0:
+        raise ValueError(f"K must be > 0, got {K}")
+    if sigma <= 0:
+        raise ValueError(f"sigma must be > 0, got {sigma}")
+    if T < 0:
+        raise ValueError(f"T must be >= 0, got {T}")
+
+    # Garman-Kohlhagen = cost of carry with q = r_f, discounting at r_d.
+    contract = EuropeanOption(K, call)
+    model = BlackScholesModel(St, r_d, sigma, r_f)
+    pricer = BSPricer(contract, model, T)
+
+    if engine == "analytical":
+        return pricer.price_analytical()
+    return pricer.price_mc(n_paths=n_paths, n_steps=1, seed=seed)  # type: ignore[arg-type]
+
+def get_price_future_option(
+    F0: float,
+    K: float,
+    T: float,
+    r: float,
+    sigma: float,
+    call: bool,
+    engine: str = "analytical",
+    n_paths: int | None = None,
+    seed: int | None = None,
+) -> float:
+    """
+    Price a European option on a future under the Black-76 model.
+
+    F0 is the current future price. Under Q the future is driftless,
+    dF = sigma F dW, i.e. the cost-of-carry model with zero carry (q = r);
+    discounting uses r. With these inputs the price is the Black-76 value
+    e^{-rT} (F0 N(d_+) - K N(d_-)) for a call. No separate "futures model":
+    reuse the same Black-Scholes model with q = r.
+
+    Returns
+    -------
+    float
+        Option price at valuation date.
+    """
+    if engine not in ("analytical", "mc"):
+        raise ValueError(f"engine must be 'analytical' or 'mc', got {engine!r}")
+    if engine == "mc" and n_paths is None:
+        raise ValueError("n_paths is required when engine='mc'")
+    if F0 <= 0:
+        raise ValueError(f"F0 must be > 0, got {F0}")
+    if K <= 0:
+        raise ValueError(f"K must be > 0, got {K}")
+    if sigma <= 0:
+        raise ValueError(f"sigma must be > 0, got {sigma}")
+    if T < 0:
+        raise ValueError(f"T must be >= 0, got {T}")
+
+    # Black-76 = cost of carry with zero carry (q = r); discounting at r.
+    contract = EuropeanOption(K, call)
+    model = BlackScholesModel(F0, r, sigma, r)
+    pricer = BSPricer(contract, model, T)
+
+    if engine == "analytical":
+        return pricer.price_analytical()
+    return pricer.price_mc(n_paths=n_paths, n_steps=1, seed=seed)  # type: ignore[arg-type]
+
 def get_price_bs_geometric_asian(
     St: float,
     K: float,
